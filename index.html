@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone01 Profile</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Login Page */
+        .login-box {
+            max-width: 350px;
+            margin: 100px auto;
+            text-align: center;
+        }
+
+        .login-box h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: #4facfe;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .login-box button:hover {
+            background: #3d8bfe;
+        }
+
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            color: white;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Profile Layout */
+        .profile-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+
+        .info-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4facfe;
+            padding-bottom: 5px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stat:last-child {
+            border-bottom: none;
+        }
+
+        .projects {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .project {
+            background: #f8f9fa;
+            padding: 5px 10px;
+            margin: 3px 0;
+            border-radius: 3px;
+        }
+
+        /* Charts */
+        .chart-section h3 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .chart-info {
+            text-align: center;
+            color: #666;
+            margin-bottom: 15px;
+            min-height: 20px;
+        }
+
+        .chart-container {
+            height: 300px;
+            overflow-x: auto;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+
+        .bar {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .bar:hover {
+            opacity: 0.7;
+        }
+
+        .ratio-display {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 15px 0;
+            color: #333;
+        }
+
+        .ratio-bar {
+            height: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .ratio-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .profile-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        // Configuration
+        const API = {
+            login: "https://learn.zone01oujda.ma/api/auth/signin",
+            graphql: "https://learn.zone01oujda.ma/api/graphql-engine/v1/graphql"
+        };
+
+        const QUERY = `query {
+            user {
+                login firstName lastName email auditRatio totalUp totalDown
+                finished_projects: groups(where: {group: {status: {_eq: finished}, _and: [{path: {_like: "%module%"}}, {path: {_nilike: "%piscine-js%"}}]}}) {
+                    group { path members { userLogin } }
+                }
+                transactions_aggregate(where: {eventId: {_eq: 41}, type: {_eq: "xp"}}) {
+                    aggregate { sum { amount } }
+                }
+            }
+        }`;
+
+        let userData = {};
+        let collaborators = [];
+        let token = null;
+
+        // Utility function
+        function formatXP(bytes) {
+            if (bytes < 1000) return bytes + " XP";
+            if (bytes < 1000000) return Math.floor(bytes / 1000) + " kXP";
+            return Math.floor(bytes / 1000000) + " MXP";
+        }
+
+        // Show login page
+        function showLogin() {
+            document.getElementById('app').innerHTML = `
+                <div class="card login-box">
+                    <h1>Zone01 Login</h1>
+                    <input type="text" id="username" placeholder="Username" required>
+                    <input type="password" id="password" placeholder="Password" required>
+                    <button onclick="login()">Login</button>
+                    <div id="error" class="error"></div>
+                </div>
+            `;
+        }
+
+        // Handle login
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const credentials = btoa(`${username}:${password}`);
+
+            try {
+                const response = await fetch(API.login, {
+                    method: "POST",
+                    headers: { Authorization: `Basic ${credentials}` }
+                });
+
+                if (!response.ok) throw new Error('Invalid credentials');
+
+                token = await response.json();
+                loadProfile();
+            } catch (error) {
+                document.getElementById('error').textContent = 'Login failed. Try again.';
+            }
+        }
+
+        // Load profile data
+        async function loadProfile() {
+            try {
+                const response = await fetch(API.graphql, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ query: QUERY })
+                });
+
+                const result = await response.json();
+                if (result.errors) throw new Error('Failed to fetch data');
+
+                const user = result.data.user[0];
+                userData = {
+                    username: user.login,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email,
+                    auditRatio: parseFloat(user.auditRatio).toFixed(1),
+                    totalUp: user.totalUp,
+                    totalDown: user.totalDown,
+                    projects: user.finished_projects,
+                    xp: formatXP(user.transactions_aggregate.aggregate.sum.amount)
+                };
+
+                // Process collaborators
+                collaborators = [];
+                userData.projects.forEach(project => {
+                    project.group.members.forEach(member => {
+                        if (member.userLogin !== userData.username) {
+                            let collab = collaborators.find(c => c.name === member.userLogin);
+                            if (collab) {
+                                collab.count++;
+                            } else {
+                                collaborators.push({ name: member.userLogin, count: 1 });
+                            }
+                        }
+                    });
+                });
+
+                showProfile();
+            } catch (error) {
+                showLogin();
+            }
+        }
+
+        // Show profile page
+        function showProfile() {
+            document.getElementById('app').innerHTML = `
+                <div class="container">
+                    <div class="header">
+                        <h1>Welcome, ${userData.firstName}!</h1>
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    </div>
+
+                    <div class="profile-grid">
+                        <div class="info-section">
+                            <div class="card">
+                                <h3>Personal Info</h3>
+                                <div class="stat"><span>Username:</span><span>${userData.username}</span></div>
+                                <div class="stat"><span>Email:</span><span>${userData.email}</span></div>
+                                <div class="stat"><span>XP:</span><span>${userData.xp}</span></div>
+                                <div class="stat"><span>Audit Ratio:</span><span>${userData.auditRatio}</span></div>
+                                <div class="stat"><span>Projects:</span><span>${userData.projects.length}</span></div>
+                            </div>
+
+                            <div class="card">
+                                <h3>Completed Projects</h3>
+                                <div class="projects">
+                                    ${userData.projects.map(p => `<div class="project">${p.group.path.split('/').pop()}</div>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="chart-section">
+                            <div class="card">
+                                <h3>Collaboration Partners</h3>
+                                <div id="collab-info" class="chart-info">Hover bars for details</div>
+                                <div id="collab-chart" class="chart-container"></div>
+                            </div>
+
+                            <div class="card">
+                                <h3>Audit Ratio</h3>
+                                <div class="ratio-display">${userData.auditRatio}</div>
+                                <div id="ratio-bar" class="ratio-bar"></div>
+                                <div class="ratio-labels">
+                                    <span style="color: #28a745">Given: ${userData.totalUp}</span>
+                                    <span style="color: #dc3545">Received: ${userData.totalDown}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            drawCollaborationChart();
+            drawAuditRatio();
+        }
+
+        // Draw collaboration chart
+        function drawCollaborationChart() {
+            if (collaborators.length === 0) return;
+
+            collaborators.sort((a, b) => b.count - a.count);
+            const maxCount = collaborators[0].count;
+            const width = Math.max(400, collaborators.length * 50);
+
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", width);
+            svg.setAttribute("height", "250");
+
+            collaborators.forEach((collab, i) => {
+                const barHeight = (collab.count / maxCount) * 200;
+                const x = i * 45 + 10;
+                const y = 230 - barHeight;
+
+                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                rect.setAttribute("x", x);
+                rect.setAttribute("y", y);
+                rect.setAttribute("width", "35");
+                rect.setAttribute("height", barHeight);
+                rect.setAttribute("fill", "#4facfe");
+                rect.setAttribute("rx", "3");
+                rect.classList.add("bar");
+
+                rect.onmouseover = () => {
+                    document.getElementById('collab-info').textContent = `${collab.name}: ${collab.count} projects`;
+                };
+                rect.onmouseout = () => {
+                    document.getElementById('collab-info').textContent = 'Hover bars for details';
+                };
+
+                svg.appendChild(rect);
+            });
+
+            document.getElementById('collab-chart').appendChild(svg);
+        }
+
+        // Draw audit ratio
+        function drawAuditRatio() {
+            const total = userData.totalUp + userData.totalDown;
+            const upPercent = (userData.totalUp / total) * 100;
+
+            document.getElementById('ratio-bar').innerHTML = `
+                <div style="width: ${upPercent}%; height: 100%; background: #28a745; float: left;"></div>
+                <div style="width: ${100 - upPercent}%; height: 100%; background: #dc3545; float: right;"></div>
+            `;
+        }
+
+        // Logout function
+        function logout() {
+            token = null;
+            showLogin();
+        }
+
+        // Start the app
+        showLogin();
+    </script>
+</body>
+</html>
