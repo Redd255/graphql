@@ -216,6 +216,42 @@
         let collaborators = [];
         let token = null;
 
+        function saveToken(token) {
+            try {
+                localStorage.setItem('zone01_token', token);
+            } catch (e) {
+                console.log('localStorage not available');
+            }
+        }
+
+        function getToken() {
+            try {
+                return localStorage.getItem('zone01_token');
+            } catch (e) {
+                console.log('localStorage not available');
+                return null;
+            }
+        }
+
+        function removeToken() {
+            try {
+                localStorage.removeItem('zone01_token');
+            } catch (e) {
+                console.log('localStorage not available');
+            }
+        }
+
+        function isTokenValid(token) {
+            if (!token) return false;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const now = Date.now() / 1000;
+                return payload.exp > now;
+            } catch (e) {
+                return false;
+            }
+        }
+
         // Utility function
         function formatXP(bytes) {
             if (bytes < 1000) return bytes + " XP";
@@ -251,6 +287,7 @@
                 if (!response.ok) throw new Error('Invalid credentials');
 
                 token = await response.json();
+                saveToken(token); 
                 loadProfile();
             } catch (error) {
                 document.getElementById('error').textContent = 'Login failed. Try again.';
@@ -285,7 +322,6 @@
                     xp: formatXP(user.transactions_aggregate.aggregate.sum.amount)
                 };
 
-                // Process collaborators
                 collaborators = [];
                 userData.projects.forEach(project => {
                     project.group.members.forEach(member => {
@@ -336,9 +372,18 @@
 
                         <div class="chart-section">
                             <div class="card">
-                                <h3>Collaboration Partners</h3>
-                                <div id="collab-info" class="chart-info">Hover bars for details</div>
-                                <div id="collab-chart" class="chart-container"></div>
+                                <div>
+                                    <h3>Projects Completed</h3>
+                                    <div class="ratio-display" style="color: #4facfe;">${userData.projects.length}</div>
+                                    <div style="text-align: center; color: #666; margin-top: 10px; margin-bottom: 30px;">
+                                        Total finished projects
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3>Collaboration Partners</h3>
+                                    <div id="collab-info" class="chart-info">Hover bars for details</div>
+                                    <div id="collab-chart" class="chart-container" style="height: 200px;"></div>
+                                </div>
                             </div>
 
                             <div class="card">
@@ -350,6 +395,7 @@
                                     <span style="color: #dc3545">Received: ${userData.totalDown}</span>
                                 </div>
                             </div>
+                            
                         </div>
                     </div>
                 </div>
@@ -359,27 +405,26 @@
             drawAuditRatio();
         }
 
-        // Draw collaboration chart
         function drawCollaborationChart() {
             if (collaborators.length === 0) return;
 
             collaborators.sort((a, b) => b.count - a.count);
             const maxCount = collaborators[0].count;
-            const width = Math.max(400, collaborators.length * 50);
+            const width = Math.max(300, collaborators.length * 40);
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
-            svg.setAttribute("height", "250");
+            svg.setAttribute("height", "180");
 
             collaborators.forEach((collab, i) => {
-                const barHeight = (collab.count / maxCount) * 200;
-                const x = i * 45 + 10;
-                const y = 230 - barHeight;
+                const barHeight = (collab.count / maxCount) * 140;
+                const x = i * 35 + 10;
+                const y = 170 - barHeight;
 
                 const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
                 rect.setAttribute("x", x);
                 rect.setAttribute("y", y);
-                rect.setAttribute("width", "35");
+                rect.setAttribute("width", "25");
                 rect.setAttribute("height", barHeight);
                 rect.setAttribute("fill", "#4facfe");
                 rect.setAttribute("rx", "3");
@@ -398,7 +443,6 @@
             document.getElementById('collab-chart').appendChild(svg);
         }
 
-        // Draw audit ratio
         function drawAuditRatio() {
             const total = userData.totalUp + userData.totalDown;
             const upPercent = (userData.totalUp / total) * 100;
@@ -409,14 +453,24 @@
             `;
         }
 
-        // Logout function
         function logout() {
             token = null;
+            removeToken(); 
             showLogin();
         }
 
-        // Start the app
-        showLogin();
+        function initApp() {
+            const savedToken = getToken();
+            if (savedToken && isTokenValid(savedToken)) {
+                token = savedToken;
+                loadProfile();
+            } else {
+                removeToken();
+                showLogin();
+            }
+        }
+
+        initApp();
     </script>
 </body>
 </html>
